@@ -871,7 +871,7 @@ function budgetTab(p,c){
     bs.forEach(function(b){var x=budgetCalc(b);
       rows.push('<tr'+(x.left<0?' class="neg"':'')+'><td>'+esc(catOf(b))+(catOk(b.cat)?'':' <span class="pill wait" title="不在公司規定類別">⚠</span>')+'</td><td class="n">'+esc(b.no)+'</td><td>'+esc(b.item)+'</td><td class="n">'+money(b.price)+'</td><td class="n">'+esc(b.qty)+'</td><td>'+esc(b.unit||'')+'</td><td class="n">'+money(b.total)+'</td><td class="n">'+money(x.spent)+'</td><td class="n">'+money(x.held)+'</td><td class="n bal">'+money(x.left)+'</td><td>'+esc(b.note||'')+'</td><td class="act">'+rowBtns('budget',b.id)+'</td></tr>')})});
   var msum=months.map(function(m){var bs=c.B.filter(function(b){return b.month===m}),t=sum(bs,'total'),sp=SM[m]||0,h=HM[m]||0;var mo=MV.o[m]||0,mi=MV.i[m]||0;return'<tr><td>'+esc(monthFull(p.id,m))+'</td><td class="n">'+money(t)+'</td><td class="n">'+money(sp)+(mi?'<br><small>含轉入 '+money(mi)+'</small>':'')+'</td><td class="n">'+money(h+mo)+(mo?'<br><small>含轉出 '+money(mo)+'</small>':'')+'</td><td class="n">'+money(t-sp-h-mo+mi)+'</td><td class="n">'+(t?pct(sp-mi,t):0)+'%</td></tr>'});
-  return note+catWarn(c.B)+bvSection(p)+sec('經費預算明細(依月份)',impBtn('budget')+addBtn('budget','新增預算項目'),
+  return note+catWarn(c.B)+sec('經費預算明細(依月份)',impBtn('budget')+addBtn('budget','新增預算項目'),
     '<div style="padding:.6rem .9rem">'+seg+'</div>'+table(['類別','#項次','項目','#單價','#數量','單位','#總價','#已核銷','#保留展延','#餘額','說明',''],rows,
     '<tr><td colspan="6">總計'+(sel==='all'?'':'(全年度)')+'</td><td class="n">'+money(c.total)+'</td><td class="n">'+money(c.spent)+'</td><td class="n">'+money(c.held)+'</td><td class="n">'+money(c.avail)+'</td><td colspan="2"></td></tr>','尚未編列預算,請新增預算項目。')
     +'<p class="hint" style="padding:.5rem .9rem">各單項不足時得核實勻支。核銷與保留金額會自動從項目餘額扣除。</p>',1)
@@ -1109,11 +1109,11 @@ function bvLine(x){return esc((x.cat||'未分類')+'｜'+x.month+'｜'+x.item+'(
 function bvSection(p){
   var vs=bvOf(p.id),last=vs[vs.length-1],ep=effPoa(p),poaMsg='';
   var lastPoa=last?(last.poaVer==null||last.poaVer===''?0:Number(last.poaVer)):0;
-  if(ep&&ep.ver>lastPoa)poaMsg='<div class="note warn" style="margin:.6rem .9rem">年度 POA 已異動到 v'+ep.ver+(last?',而目前預算版本 v'+last.ver+' 對應的是 POA v'+lastPoa:',但計畫書預算尚未建立任何異動版本')+'。請建立預算異動版本,記錄這次調整。</div>';
+  if(ep&&ep.ver>lastPoa)poaMsg='<div class="note warn" style="margin:.6rem .9rem">年度 POA 已異動到 v'+ep.ver+(last?',而目前預算版本 v'+last.ver+' 對應的是 POA v'+lastPoa:',但計畫書預算尚未建立任何異動版本')+'。預算版本以年度 POA 版本為聯動單位,請依最新 POA 調整本方案預算。</div>';
   var rows=vs.slice().reverse().map(function(v,i){var prev=vs[vs.indexOf(v)-1],d=prev?bvDiff(prev.lines,v.lines||[]):null,delta=prev?Math.round((v.total-prev.total)*100)/100:0;
     return'<tr><td><b>v'+v.ver+'</b> '+esc(v.type||'')+(v===last?' <span class="pill run">生效中</span>':'')+'</td><td>'+esc(v.date||'')+'</td><td>'+(v.poaVer==null||v.poaVer===''?'—':'POA v'+esc(v.poaVer))+'</td><td class="n">'+money(v.total)+(prev&&delta?' <small class="'+(delta>0?'up':'dn')+'">'+(delta>0?'+':'−')+money(Math.abs(delta))+'</small>':'')+'</td><td>'+(d?'新增 '+d.add.length+'、刪除 '+d.del.length+'、修改 '+d.chg.length:'')+'</td><td>'+esc(v.reason||'')+(v.approver?'(核定:'+esc(v.approver)+')':'')+'</td><td class="act"><button class="btn sm" data-a="bvView" data-id="'+v.id+'">檢視</button></td></tr>'});
-  var intro=last?'':'<p class="hint" style="padding:.6rem .9rem">目前是原始計畫書(尚未異動)。POA 因實際執行狀況異動時,請按「新增預算異動版本」:系統會先保存目前內容為 v0(原始),之後您修改的預算都會記錄在新版本,舊版本保持不變、可隨時比對。</p>';
-  return sec('預算版本(計畫書異動紀錄)',canWrite?'<button class="btn sm pri" data-a="bvNew">新增預算異動版本</button>':'',poaMsg+intro+(vs.length?table(['版本','日期','對應 POA','#合計','與前一版差異','異動原因',''],rows,'',''):''),1)}
+  var intro=last?'':'<p class="hint" style="padding:.6rem .9rem">目前是原始計畫書(尚未異動)。預算版本以「年度 POA」的版本為聯動單位;POA 異動後,請依最新 POA 調整本方案預算。</p>';
+  return sec('預算版本(計畫書異動紀錄)','',poaMsg+intro+(vs.length?table(['版本','日期','對應 POA','#合計','與前一版差異','異動原因',''],rows,'',''):''),1)}
 function bvViewOpen(id){
   var v=S.budgetVersions.get(id);if(!v)return;var vs=bvOf(v.projectId),prev=vs[vs.indexOf(v)-1],d=prev?bvDiff(prev.lines,v.lines||[]):null,L=v.lines||[];
   var dh='';
@@ -1307,7 +1307,7 @@ async function poaSave(){
     if(mode==='new'){var id=await saveDoc('poaPlans',null,{center:center,fy:fy,total:target});await saveDoc('poaVersions',null,{planId:id,ver:0,type:'原始',date:date,lines:lines,names:names,binds:binds,total:total,reason:'原始 POA',by:uid,byName:myName()});V.planId=id}
     else if(mode==='edit0'){await saveDoc('poaPlans',plan.id,{total:target});await saveDoc('poaVersions',versionsOf(plan.id).slice(-1)[0].id,Object.assign({lines:lines,names:names,binds:binds,total:total},xfer?{xfer:xfer}:{}))}
     else{var vs=versionsOf(plan.id);await saveDoc('poaVersions',null,{planId:plan.id,ver:vs[vs.length-1].ver+1,type:'異動',date:date,lines:lines,names:names,binds:binds,total:total,reason:reason,approver:appr,xfer:xfer||null,by:uid,byName:myName()})}
-    V.ver=null;V.tab='poa';closeModal();toast(mode==='memo'?'已建立新版本,即日起以新版本為準。請到各方案的「預算」頁建立對應的預算異動版本':'已儲存');sched();
+    V.ver=null;V.tab='poa';closeModal();toast(mode==='memo'?'已建立新版本,即日起以新版本為準。請依最新 POA 調整各方案的預算':'已儲存');sched();
   }catch(e){btn.disabled=false}
 }
 
@@ -1753,7 +1753,6 @@ var A={
  poametric:function(d){V.metric=d.v;sched()},
  poaplan:function(d){V.planId=d.id;V.ver=null;sched()},
  poaNew:function(){openPoaEditor('new',null)},
- bvNew:function(){openForm('budgetVer',V.pid,null,{})},
  bvView:function(d){bvViewOpen(d.id)},
  evPhotos:function(d){openEvPhotos(d.id)},
  evPhotoDel:async function(d){var s0=window.__ph;if(!s0)return;var ok=await ask('刪除這張照片?刪除後無法復原。','刪除');if(!ok){evPhotosDraw();return}s0.list.splice(Number(d.i),1);try{await saveDoc('events',s0.id,{photos:s0.list})}catch(e){toast('刪除失敗')}evPhotosDraw()},
