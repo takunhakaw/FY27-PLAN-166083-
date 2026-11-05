@@ -1154,15 +1154,17 @@ function poaView(){
   var metric=V.metric||'alloc';
   var chips=plans.length>1?'<div class="seg" style="margin-bottom:.8rem">'+plans.map(function(x){return'<button data-a="poaplan" data-id="'+x.id+'" aria-pressed="'+(x.id===plan.id)+'">'+esc(x.center+' '+x.fy+(TEAMV&&planOwner(x)?'('+planOwner(x)+')':''))+'</button>'}).join('')+'</div>':'';
   var acts=canWrite?'<div class="actions"><button class="btn pri" data-a="poaMemo">新增經費異動版本</button>'+'<button class="btn" data-a="poaEdit0">修改目前版本</button><button class="btn" data-a="poaImportBtn">匯入 Excel</button>'+(latest.ver>0?'<button class="btn bad" data-a="poaDelLatest">刪除最新版本</button>':'')+'<button class="btn" data-a="poaNew">另建年度 POA</button><button class="btn bad" data-a="poaDelPlan">刪除這份 POA</button></div>':'';
+  var bt=poaBase(plan,latest),xf=xferOf(latest);
   h+=chips+'<div class="bar"><h2>'+esc(plan.center)+'　'+esc(plan.fy)+'</h2>'+acts+'</div>'
-   +'<div class="strip"><div><small>原始 POA 年度總額</small><b>$'+money(plan.total)+'</b></div><div><small>生效版本</small><b>v'+latest.ver+(latest.ver?' 異動':' 原始')+'</b></div><div class="'+(Math.abs(lt-plan.total)>0.005?'neg':'')+'"><small>生效登記合計</small><b>$'+money(lt)+'</b></div><div><small>已編入方案計畫書</small><b>$'+money(planT)+'</b></div><div><small>已核銷</small><b>$'+money(spentT)+'</b></div><div class="'+(lt-spentT<0?'neg':'')+'"><small>年度剩餘(登記額−核銷)</small><b>$'+money(lt-spentT)+'</b></div></div>';
-  if(Math.abs(lt-plan.total)>0.005)h+='<div class="note bad">生效版本合計 $'+money(lt)+' 與原始 POA $'+money(plan.total)+' 不符,請新增異動版本修正。</div>';
+   +'<div class="strip"><div><small>原始 POA 年度總額</small><b>$'+money(plan.total)+'</b></div>'+((xf.out||xf.inn)?'<div><small>轉出 / 轉入</small><b style="font-size:.95rem">−'+money(xf.out)+' / +'+money(xf.inn)+'</b></div><div><small>調整後年度基準</small><b>$'+money(bt)+'</b></div>':'')+'<div><small>生效版本</small><b>v'+latest.ver+(latest.ver?' 異動':' 原始')+'</b></div><div class="'+(Math.abs(lt-bt)>0.005?'neg':'')+'"><small>生效登記合計</small><b>$'+money(lt)+'</b></div><div><small>已編入方案計畫書</small><b>$'+money(planT)+'</b></div><div><small>已核銷</small><b>$'+money(spentT)+'</b></div><div class="'+(lt-spentT<0?'neg':'')+'"><small>年度剩餘(登記額−核銷)</small><b>$'+money(lt-spentT)+'</b></div></div>';
+  if(Math.abs(lt-bt)>0.005)h+='<div class="note bad">生效版本合計 $'+money(lt)+' 與'+((xf.out||xf.inn)?'調整後年度基準':'原始 POA')+' $'+money(bt)+' 不符,請新增異動版本修正。</div>';
+  if(xf.out||xf.inn)h+='<div class="note info">此版本含方案費用轉移:'+esc(xferText(latest))+'。調整後年度基準 = 原始 POA $'+money(plan.total)+' − 轉出 $'+money(xf.out)+' + 轉入 $'+money(xf.inn)+' = $'+money(bt)+'。</div>';
   if(over.length)h+='<div class="note bad">已核銷超過登記額:'+esc(over.slice(0,5).map(lab).join('、'))+(over.length>5?' 等 '+over.length+' 項':'')+'。請新增異動版本調整。</div>';
   var unb=[];S.projects.forEach(function(x){if(x.center!==plan.center)return;var cd=poaCodeFor(x);if(!cd||!Object.keys(L).some(function(k){return k.split(SEP)[0]===cd}))unb.push(x)});
   if(unb.length)h+='<div class="note warn">以下'+(TEAMV?'':'「我的方案」')+'方案尚未綁定到任何 POA 列,經費無法比對:'+esc(unb.slice(0,6).map(function(x){return x.name+'('+(x.code||'無編碼')+')'}).join('、'))+(unb.length>6?' 等 '+unb.length+' 個':'')+'。請按「修改目前版本」,在對應 POA 列的選單中綁定方案。</div>';
-  if(planT>plan.total+0.005)h+='<div class="note bad">各方案計畫書經費合計 $'+money(planT)+',已超過年度 POA 總額 $'+money(plan.total)+'。</div>';
+  if(planT>bt+0.005)h+='<div class="note bad">各方案計畫書經費合計 $'+money(planT)+',已超過年度 POA '+((xf.out||xf.inn)?'調整後基準':'總額')+' $'+money(bt)+'。</div>';
   var vl=vs.slice().reverse().map(function(v){var d=0,pv=vs[vs.indexOf(v)-1];if(pv){var a=cellMap(v.lines),b=cellMap(pv.lines),ks={};Object.keys(a).concat(Object.keys(b)).forEach(function(k){ks[k]=1});Object.keys(ks).forEach(function(k){if((a[k]||0)!==(b[k]||0))d++})}
-    return'<button class="ver" data-a="poaver" data-id="'+v.id+'" aria-current="'+(v.id===sel.id)+'"><b><span>v'+v.ver+' '+(v.ver?'異動':'原始')+'</span>'+(v.id===latest.id?'<span class="pill run">生效中</span>':'')+'</b><small>'+esc(v.date||'')+(v.byName?' ・ '+esc(v.byName):'')+'</small><small>合計 $'+money(v.total)+(pv?' ・ 異動 '+d+' 格':'')+'</small>'+(v.reason&&v.ver?'<small>'+esc(v.reason)+'</small>':'')+(v.approver?'<small>核定:'+esc(v.approver)+'</small>':'')+'</button>'}).join('');
+    return'<button class="ver" data-a="poaver" data-id="'+v.id+'" aria-current="'+(v.id===sel.id)+'"><b><span>v'+v.ver+' '+(v.ver?'異動':'原始')+'</span>'+(v.id===latest.id?'<span class="pill run">生效中</span>':'')+'</b><small>'+esc(v.date||'')+(v.byName?' ・ '+esc(v.byName):'')+'</small><small>合計 $'+money(v.total)+(pv?' ・ 異動 '+d+' 格':'')+'</small>'+(v.reason&&v.ver?'<small>'+esc(v.reason)+'</small>':'')+(xferText(v)?'<small>'+esc(xferText(v))+'</small>':'')+(v.approver?'<small>核定:'+esc(v.approver)+'</small>':'')+'</button>'}).join('');
   var A=cellMap(sel.lines),P=prev?cellMap(prev.lines):null;
   var codes=codesOfMaps(A,L,st.plan,st.spent);
   var srows=codes.map(function(code){var al=0,pl=0,sp=0;MONTHS.forEach(function(m){var k=code+SEP+m;al+=L[k]||0;pl+=st.plan[k]||0;sp+=st.spent[k]||0});var pr=projByCode(code,plan.center),bound=latest.binds&&latest.binds[code];
@@ -1188,14 +1190,20 @@ function poaView(){
 }
 function poaBindOpts(sel){var o='<option value="">(未綁定:依事工編碼比對)</option>';var ps=[];S.projects.forEach(function(p){if(!window.__poaCenter||p.center===window.__poaCenter)ps.push(p)});ps.sort(function(a,b){return String(a.code).localeCompare(String(b.code))});ps.forEach(function(p){o+='<option value="'+esc(p.id)+'"'+(p.id===sel?' selected':'')+'>'+esc('綁定:'+p.name+'('+(p.code||'無編碼')+')')+'</option>'});return o}
 function poaRow(code,name,vals,bind){if(bind===undefined){var ap=code?projByCode(code,window.__poaCenter):null;bind=ap?ap.id:''}return'<tr data-row><td><input type="text" class="pc" list="dl_poacode" placeholder="事工編碼" value="'+esc(code)+'" aria-label="事工編碼"><input type="text" class="pnm" placeholder="方案名稱" value="'+esc(name)+'" aria-label="方案名稱" style="margin-top:.2rem"><select class="pbind" aria-label="綁定我的方案" style="margin-top:.2rem;width:100%">'+poaBindOpts(bind)+'</select></td>'+MONTHS.map(function(m){var v=vals[m];return'<td><input type="number" class="pn" min="0" step="any" inputmode="decimal" data-m="'+m+'" value="'+(v?v:'')+'" aria-label="'+esc(m)+'"></td>'}).join('')+'<td class="n rt">0</td><td><button type="button" class="btn sm" data-a="poaDelRow" aria-label="刪除此列">×</button></td></tr>'}
-function poaTarget(){var t=document.getElementById('pt');return t?Number(t.value)||0:(window.__poaTarget||0)}
+function xferOf(v){var x=(v&&v.xfer)||{};return{out:Number(x.out)||0,outTo:x.outTo||'',inn:Number(x['in'])||0,inFrom:x.inFrom||'',note:x.note||''}}
+function poaBase(plan,v){var x=xferOf(v);return Math.round(((Number(plan.total)||0)+x.inn-x.out)*100)/100}
+function xferText(v){var x=xferOf(v),a=[];if(x.out)a.push('累計轉出 $'+money(x.out)+(x.outTo?'(給 '+x.outTo+')':''));if(x.inn)a.push('累計轉入 $'+money(x.inn)+(x.inFrom?'(自 '+x.inFrom+')':''));return a.join(';')}
+function xferFields(v){var x=xferOf(v);return'<div class="note info" style="margin:0"><b>方案費用轉給其他社工(或由他人轉入)時,請填這裡。</b>填的是<b>截至此版本的累計金額</b>。調整後的年度基準 = 原始 POA − 轉出 + 轉入,全年登記合計必須等於這個基準;本人的 POA 仍然只登記自己的方案。</div>'
+ +'<div class="two"><div class="fld"><label for="xout">轉出金額(累計,元)</label><input type="number" id="xout" min="0" step="any" value="'+(x.out||'')+'"></div><div class="fld"><label for="xoutto">轉給誰(社工姓名)</label><input type="text" id="xoutto" value="'+esc(x.outTo)+'"></div></div>'
+ +'<div class="two"><div class="fld"><label for="xin">轉入金額(累計,元)</label><input type="number" id="xin" min="0" step="any" value="'+(x.inn||'')+'"></div><div class="fld"><label for="xinfrom">由誰轉入(社工姓名)</label><input type="text" id="xinfrom" value="'+esc(x.inFrom)+'"></div></div>'}
+function poaTarget(){var t=document.getElementById('pt'),b=t?Number(t.value)||0:(window.__poaTarget||0),o=document.getElementById('xout'),i=document.getElementById('xin');if(o||i)b+=(Number(i&&i.value)||0)-(Number(o&&o.value)||0);return Math.round(b*100)/100}
 function poaRecalc(){
   var tr=document.querySelectorAll('#pg tbody tr'),colT=MONTHS.map(function(){return 0}),gt=0;
   tr.forEach(function(r){var t=0;r.querySelectorAll('.pn').forEach(function(i,ix){var v=Number(i.value)||0;t+=v;colT[ix]+=v});r.querySelector('.rt').textContent=money(Math.round(t*100)/100);gt+=t});
   document.querySelectorAll('#pg tfoot .ct').forEach(function(td,i){td.textContent=money(Math.round(colT[i]*100)/100)});
   var g=document.getElementById('pgt');if(g)g.textContent=money(Math.round(gt*100)/100);
   var tgt=poaTarget(),diff=Math.round((gt-tgt)*100)/100,el=document.getElementById('pchk');
-  if(el){el.className='chk '+(Math.abs(diff)<0.005&&tgt>0?'ok':'bad');el.textContent=tgt<=0?'請先輸入原始 POA 年度總額。':Math.abs(diff)<0.005?'✔ 全年登記合計 $'+money(gt)+' 與原始 POA 相符':'✘ 登記合計 $'+money(gt)+(diff>0?',超出原始 POA $':',尚缺 $')+money(Math.abs(diff))+'。全年總額必須與原始 POA 相同才能儲存。'}
+  if(el){el.className='chk '+(Math.abs(diff)<0.005&&tgt>0?'ok':'bad');el.textContent=tgt<=0?'請先輸入原始 POA 年度總額。':Math.abs(diff)<0.005?'✔ 全年登記合計 $'+money(gt)+' 與年度基準 $'+money(tgt)+' 相符':'✘ 登記合計 $'+money(gt)+(diff>0?',超出年度基準 $':',尚缺 $')+money(Math.abs(diff))+'(基準 $'+money(tgt)+',已含轉出/轉入調整)。全年合計必須等於基準才能儲存。'}
 }
 function openPoaEditor(mode,plan){
   var vs=plan?versionsOf(plan.id):[],latest=vs[vs.length-1],base=mode==='new'?null:latest;
@@ -1212,8 +1220,9 @@ function openPoaEditor(mode,plan){
   var top='';
   if(mode==='new')top='<div class="two"><div class="fld"><label for="pcen">執行中心 <i>*</i></label><input type="text" id="pcen" list="dl_pcen" value="'+esc(center)+'"><datalist id="dl_pcen">'+Object.keys(centers).map(function(c){return'<option value="'+esc(c)+'">'}).join('')+'</datalist></div><div class="fld"><label for="pfy">年度</label><input type="text" id="pfy" value="FY26"><div class="help">10月至隔年9月</div></div></div>';
   if(mode==='edit0'&&plan)top+='<div class="note info">直接在目前生效版本 v'+latest.ver+' 上新增方案列或調整金額,<b>不會產生新版本</b>,也不用重新登打。若這是正式的經費異動、需要留下紀錄,請改用「新增經費異動版本」。</div>';
-  if(mode!=='memo')top+='<div class="fld"><label for="pt">原始 POA 年度總額(元) <i>*</i></label><input type="number" id="pt" min="0" step="any" value="'+(plan?plan.total:'')+'"><div class="help">這個數字是之後所有異動版本必須相等的基準。</div></div>';
-  else top='<div class="note info">原始 POA 年度總額 <b>$'+money(plan.total)+'</b>。新版本是整年度的重新登記,全年合計必須剛好等於這個數字;已核銷的方案/月份,登記額不可低於已核銷金額。</div><div class="two"><div class="fld"><label for="pdate">異動日期</label><input type="date" id="pdate" value="'+today()+'"></div><div class="fld"><label for="pappr">核定者</label><input type="text" id="pappr"></div></div><div class="fld"><label for="preason">異動原因 <i>*</i></label><textarea id="preason"></textarea></div>';
+  var showX=mode==='memo'||(mode==='edit0'&&plan&&latest&&latest.ver>0);
+  if(mode!=='memo')top+='<div class="fld"><label for="pt">原始 POA 年度總額(元) <i>*</i></label><input type="number" id="pt" min="0" step="any" value="'+(plan?plan.total:'')+'"><div class="help">這是原始核定的數字;若之後有方案費用轉給其他社工,不要改這裡,請在異動版本填「轉出/轉入」。</div></div>'+(showX?xferFields(latest):'');
+  else top='<div class="note info">原始 POA 年度總額 <b>$'+money(plan.total)+'</b>。新版本是整年度的重新登記,全年合計必須剛好等於「原始 POA − 轉出 + 轉入」;已核銷的方案/月份,登記額不可低於已核銷金額。</div>'+xferFields(latest)+'<div class="two"><div class="fld"><label for="pdate">異動日期</label><input type="date" id="pdate" value="'+today()+'"></div><div class="fld"><label for="pappr">核定者</label><input type="text" id="pappr"></div></div><div class="fld"><label for="preason">異動原因 <i>*</i></label><textarea id="preason"></textarea></div>';
   var el=document.getElementById('layer');window.__poaTarget=plan?plan.total:0;
   var cl=[];S.projects.forEach(function(x){if(x.code)cl.push(x)});
   el.innerHTML='<div class="ov"><div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="mt"><header id="mt">'+title+(plan?'('+esc(plan.center)+' '+esc(plan.fy)+')':'')+'</header><div style="padding:1rem 1.1rem;display:grid;gap:.8rem">'+top
@@ -1274,7 +1283,15 @@ async function poaSave(){
   if(mode==='memo'){target=plan.total;center=plan.center;fy=plan.fy}
   else{target=Number(document.getElementById('pt').value)||0;if(mode==='new'){center=document.getElementById('pcen').value.trim();fy=document.getElementById('pfy').value.trim()||'FY26';if(!center){err.textContent='請填寫執行中心。';return}}else{center=plan.center;fy=plan.fy}}
   if(target<=0){err.textContent='請填寫原始 POA 年度總額。';return}
-  if(Math.abs(total-target)>0.005){err.textContent='全年登記合計 $'+money(total)+' 與原始 POA $'+money(target)+' 不同(差 $'+money(Math.abs(total-target))+'),必須相同才能儲存。';return}
+  var xe=document.getElementById('xout'),xi=document.getElementById('xin'),xfer=null;
+  if(xe||xi){var xo=Number(xe&&xe.value)||0,xn=Number(xi&&xi.value)||0;
+    if(xo<0||xn<0){err.textContent='轉出/轉入金額不可為負數。';return}
+    xfer={out:Math.round(xo*100)/100,outTo:(document.getElementById('xoutto').value||'').trim(),'in':Math.round(xn*100)/100,inFrom:(document.getElementById('xinfrom').value||'').trim()};
+    if(xfer.out&&!xfer.outTo){err.textContent='有轉出金額時,請填寫轉給哪位社工。';return}
+    if(xfer.in&&!xfer.inFrom){err.textContent='有轉入金額時,請填寫由哪位社工轉入。';return}}
+  var adj=xfer?Math.round((target+xfer['in']-xfer.out)*100)/100:target;
+  if(adj<0){err.textContent='轉出金額超過原始 POA。';return}
+  if(Math.abs(total-adj)>0.005){err.textContent='全年登記合計 $'+money(total)+' 與'+(xfer&&(xfer.out||xfer['in'])?'調整後年度基準 $'+money(adj)+'(原始 $'+money(target)+' − 轉出 $'+money(xfer.out)+' + 轉入 $'+money(xfer['in'])+')':'原始 POA $'+money(target))+' 不同(差 $'+money(Math.abs(total-adj))+'),必須相同才能儲存。';return}
   var st=poaStats(center),nm2=cellMap(lines),bad=[];
   Object.keys(st.spent).forEach(function(k){if((nm2[k]||0)<st.spent[k]-0.005){var a=k.split(SEP);bad.push(a[0]+' '+(names[a[0]]||codeName(a[0],null))+'｜'+a[1]+'(已核銷 $'+money(st.spent[k])+')')}});
   if(bad.length){err.textContent='以下方案/月份的登記額低於已核銷金額,請調高:'+bad.slice(0,4).join('、')+(bad.length>4?' 等 '+bad.length+' 項':'');return}
@@ -1282,14 +1299,14 @@ async function poaSave(){
   if(mode==='memo'){
     reason=document.getElementById('preason').value.trim();appr=document.getElementById('pappr').value.trim();date=document.getElementById('pdate').value||today();
     if(!reason){err.textContent='請填寫異動原因。';return}
-    var lv=versionsOf(plan.id).slice(-1)[0],ln=cellMap(lv.lines),same=Object.keys(ln).length===Object.keys(nm2).length&&Object.keys(nm2).every(function(k){return ln[k]===nm2[k]});
+    var lv=versionsOf(plan.id).slice(-1)[0],ln=cellMap(lv.lines),lx=xferOf(lv),sameX=!xfer||(lx.out===xfer.out&&lx.inn===xfer['in']&&lx.outTo===xfer.outTo&&lx.inFrom===xfer.inFrom),same=sameX&&Object.keys(ln).length===Object.keys(nm2).length&&Object.keys(nm2).every(function(k){return ln[k]===nm2[k]});
     if(same){err.textContent='內容與目前生效版本相同,沒有需要儲存的異動。';return}
   }
   var btn=document.getElementById('poasave');btn.disabled=true;
   try{
     if(mode==='new'){var id=await saveDoc('poaPlans',null,{center:center,fy:fy,total:target});await saveDoc('poaVersions',null,{planId:id,ver:0,type:'原始',date:date,lines:lines,names:names,binds:binds,total:total,reason:'原始 POA',by:uid,byName:myName()});V.planId=id}
-    else if(mode==='edit0'){await saveDoc('poaPlans',plan.id,{total:target});await saveDoc('poaVersions',versionsOf(plan.id).slice(-1)[0].id,{lines:lines,names:names,binds:binds,total:total})}
-    else{var vs=versionsOf(plan.id);await saveDoc('poaVersions',null,{planId:plan.id,ver:vs[vs.length-1].ver+1,type:'異動',date:date,lines:lines,names:names,binds:binds,total:total,reason:reason,approver:appr,by:uid,byName:myName()})}
+    else if(mode==='edit0'){await saveDoc('poaPlans',plan.id,{total:target});await saveDoc('poaVersions',versionsOf(plan.id).slice(-1)[0].id,Object.assign({lines:lines,names:names,binds:binds,total:total},xfer?{xfer:xfer}:{}))}
+    else{var vs=versionsOf(plan.id);await saveDoc('poaVersions',null,{planId:plan.id,ver:vs[vs.length-1].ver+1,type:'異動',date:date,lines:lines,names:names,binds:binds,total:total,reason:reason,approver:appr,xfer:xfer||null,by:uid,byName:myName()})}
     V.ver=null;V.tab='poa';closeModal();toast(mode==='memo'?'已建立新版本,即日起以新版本為準。請到各方案的「預算」頁建立對應的預算異動版本':'已儲存');sched();
   }catch(e){btn.disabled=false}
 }
