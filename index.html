@@ -527,7 +527,19 @@ function sched(){if(raf)return;raf=requestAnimationFrame(function(){raf=0;render
 /* ---------- calculations (the “virtual columns”) ---------- */
 function isActive(c){return c.status!=='已解除'}
 function fyOf(pid){var p=S.projects.get(pid);return(p&&p.fy)||'FY26'}
-function fyStart(fy){var n=parseInt(String(fy).replace(/\D/g,''),10);return 2000+(isNaN(n)?26:n)}
+function fyStart(fy){var n=parseInt(String(fy).replace(/\D/g,''),10);return 1999+(isNaN(n)?26:n)}/* FY26 = 2025/10–2026/09:10月所在的曆年 = 2000+FY數字−1 */
+function fyLabelRange(fy){var y=fyStart(fy);return y+'/10–'+(y+1)+'/09'}
+function curFY(){var d=new Date(),y=d.getFullYear(),n=y-2000+(d.getMonth()>=9?1:0);return'FY'+n}
+function fyOfDate(ds){var m=/^(\d{4})-(\d{2})/.exec(ds||'');if(!m)return'';var y=+m[1],mo=+m[2];return'FY'+(y-2000+(mo>=10?1:0))}
+/* 計畫月份 = 方案開始執行的月份;有填執行起日就以起日為準,且起日必須落在該年度內 */
+function projDateFix(d){
+  if(d.startDate){
+    var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(d.startDate);if(!m)return'執行起日格式不正確(請用 2026-11-01)';
+    var f=fyOfDate(d.startDate);
+    if(d.fy&&f!==d.fy)return'執行起日 '+d.startDate+' 屬於 '+f+',不在 '+d.fy+'('+fyLabelRange(d.fy)+')範圍內。請修正年度或執行起日。';
+    d.month=(+m[2])+'月'}
+  if(d.endDate&&d.startDate&&d.endDate<d.startDate)return'執行迄日不能早於執行起日';
+  return''}
 function monthDate(fy,m){var n=parseInt(m,10),y=fyStart(fy)+(n>=10?0:1);return new Date(y,n-1,1)}
 function monthFull(pid,m){if(!m)return'';var d=monthDate(fyOf(pid),m);return m+'('+d.getFullYear()+'/'+String(d.getMonth()+1).padStart(2,'0')+')'}
 function isDue(c){if(!isActive(c)||MONTHS.indexOf(c.toMonth)<0)return false;return monthDate(fyOf(c.projectId),c.toMonth)<=new Date()}
@@ -586,8 +598,8 @@ var ENT={
   {k:'code',l:'事工編碼',t:'text',req:1,help:'只需填編碼'},
   {k:'name',l:'方案名稱',t:'text',req:1},
   {k:'center',l:'執行中心',t:'text',req:1,ph:'例如 OO中心'},
-  {k:'fy',l:'年度',t:'select',opts:FYLIST,req:1,help:'年度為 10月至隔年9月。FY26 = 2026/10 至 2027/09;FY27 = 2027/10 至 2028/09'},
-  {k:'month',l:'計畫月份',t:'select',opts:MONTHS,req:1},
+  {k:'fy',l:'年度',t:'select',opts:FYLIST,req:1,help:'年度為 10月至隔年9月。FY26 = 2025/10 至 2026/09;FY27 = 2026/10 至 2027/09'},
+  {k:'month',l:'計畫月份(該方案開始執行之月份)',t:'select',opts:MONTHS,req:1,help:'填寫方案「開始執行」的月份。若填了下方「執行起日」,會自動以起日的月份為準。'},
   {k:'sdgs',l:'依據 SDGs',t:'multi',opts:SDGS},
   {k:'cwbo',l:'CWBO',t:'tags',help:'依 POA 指導原則填寫,多項以逗號分隔'},
   {k:'strategy',l:'服務策略',t:'tags',help:'依 POA 指導原則填寫,多項以逗號分隔'},
@@ -596,7 +608,8 @@ var ENT={
   {k:'place',l:'執行地點/場地',t:'text'},
   {k:'method',l:'執行方式及內容',t:'long',help:'概述即可,逐場流程請在「活動場次」填寫'},
   {k:'poa',l:'POA 預算(元,備用)',t:'money',help:'方案已登記在「年度 POA」時,以年度 POA 為準;未登記才使用這裡的數字'}]},
-  init:function(){return{fy:'FY26',month:MONTHS[0]}}},
+  init:function(){return{fy:curFY(),month:MONTHS[0]}},
+  validate:function(v){return projDateFix(v)}},
  objective:{col:'objectives',label:'活動目標',fields:function(){return[
   {k:'no',l:'序號',t:'num'},
   {k:'text',l:'活動目標(具體可測量)',t:'long',req:1,help:'例:在一個月內讓 80% 的成員學會三步上籃'},
@@ -768,6 +781,8 @@ function openForm(entKey,pid,old,extra){
   var form=document.getElementById('mf');
   var first=form.querySelector('input,select,textarea');if(first&&first.type!=='hidden')first.focus();
   wirePhoto(form);
+  if(entKey==='project'){var sd=form.querySelector('[name="startDate"]'),ms=form.querySelector('[name="month"]');
+    if(sd&&ms)sd.addEventListener('change',function(){var m=/^\d{4}-(\d{2})/.exec(sd.value);if(m){ms.value=(+m[1])+'月'}})}
   form.addEventListener('submit',async function(ev){
     ev.preventDefault();var err=document.getElementById('merr');err.textContent='';
     var v={};
@@ -996,7 +1011,7 @@ function ymLabel(k){var a=/^(\d{4})-(\d{2})$/.exec(k);return a?a[1]+'年'+Number
 function reportBody(p,c){
   var A=KINDS.map(function(k){return c.A.filter(function(a){return a.kind===k})[0]}).filter(Boolean);
   var co=esc(p.center||'');
-  var h='<p style="text-align:center">FY26 台灣世界展望會'+co+'</p><h1>'+esc(p.name||'')+'方案成果報告</h1>'
+  var h='<p style="text-align:center">'+esc(p.fy||'FY26')+' 台灣世界展望會'+co+'</p><h1>'+esc(p.name||'')+'方案成果報告</h1>'
    +'<p>方案主責社工員:'+esc(ownerName(p))+'　　日期:'+today()+'</p>'
    +'<h4>1. 方案編碼:'+esc(p.code||'')+'</h4>'
    +'<h4>2. 依據 SDGs 及服務策略</h4><p>(1) 依據 SDGs:'+esc((p.sdgs||[]).join('、'))+'</p><p>(2) CWBO:'+esc((p.cwbo||[]).join('、'))+'</p><p>(3) 服務策略:'+esc((p.strategy||[]).join('、'))+'</p>'
@@ -1218,7 +1233,7 @@ function openPoaEditor(mode,plan){
   if(mode==='new'||!codes.length)rows+=poaRow('','',{});
   var title=mode==='new'?'建立年度 POA(原始版本)':mode==='edit0'?'修改目前版本(新增/調整)':'新增經費異動版本(整年度重新登記)';
   var top='';
-  if(mode==='new')top='<div class="two"><div class="fld"><label for="pcen">執行中心 <i>*</i></label><input type="text" id="pcen" list="dl_pcen" value="'+esc(center)+'"><datalist id="dl_pcen">'+Object.keys(centers).map(function(c){return'<option value="'+esc(c)+'">'}).join('')+'</datalist></div><div class="fld"><label for="pfy">年度</label><input type="text" id="pfy" value="FY26"><div class="help">10月至隔年9月</div></div></div>';
+  if(mode==='new')top='<div class="two"><div class="fld"><label for="pcen">執行中心 <i>*</i></label><input type="text" id="pcen" list="dl_pcen" value="'+esc(center)+'"><datalist id="dl_pcen">'+Object.keys(centers).map(function(c){return'<option value="'+esc(c)+'">'}).join('')+'</datalist></div><div class="fld"><label for="pfy">年度</label><input type="text" id="pfy" value="'+curFY()+'"><div class="help">10月至隔年9月</div></div></div>';
   if(mode==='edit0'&&plan)top+='<div class="note info">直接在目前生效版本 v'+latest.ver+' 上新增方案列或調整金額,<b>不會產生新版本</b>,也不用重新登打。若這是正式的經費異動、需要留下紀錄,請改用「新增經費異動版本」。</div>';
   var showX=mode==='memo'||(mode==='edit0'&&plan&&latest&&latest.ver>0);
   if(mode!=='memo')top+='<div class="fld"><label for="pt">原始 POA 年度總額(元) <i>*</i></label><input type="number" id="pt" min="0" step="any" value="'+(plan?plan.total:'')+'"><div class="help">這是原始核定的數字;若之後有方案費用轉給其他社工,不要改這裡,請在異動版本填「轉出/轉入」。</div></div>'+(showX?xferFields(latest):'');
@@ -1237,7 +1252,7 @@ function openPoaEditor(mode,plan){
     poaRecalc()};poaRecalc();
 }
 function poaTemplateSheets(){
-  var hd=['事工編碼*','方案名稱'].concat(MONTHS),r1=['FY26-001','週末籃球營'],r2=['FY26-002','社區烘焙班'];MONTHS.forEach(function(m,i){r1.push(m==='11月'||m==='12月'?12000:'');r2.push(m==='11月'?8000:'')});
+  var hd=['事工編碼*','方案名稱'].concat(MONTHS),r1=['FY27-001','週末籃球營'],r2=['FY27-002','社區烘焙班'];MONTHS.forEach(function(m,i){r1.push(m==='11月'||m==='12月'?12000:'');r2.push(m==='11月'?8000:'')});
   return[{name:'說明',noHead:1,wrap:1,widths:[110],rows:[['年度 POA 匯入:在「年度POA」頁籤,每一列是一個方案,每個月份欄填該方案該月的 POA 金額(元)。'],['事工編碼必填;方案名稱選填。月份欄請勿改名(10月~9月),沒有金額的月份留空。'],['範例列請先刪除或改成你的資料。匯入後會帶入「年度 POA」編輯畫面,可再手動調整,全年合計必須等於原始 POA 年度總額才能儲存。'],['相同事工編碼的列會被更新,不同的會新增為新的方案列。']]},
     {name:'年度POA',widths:[16,24].concat(MONTHS.map(function(){return 10})),rows:[hd,r1,r2]}]}
 function poaParse(sheets){
@@ -1281,7 +1296,7 @@ async function poaSave(){
   if(msg){err.textContent=msg;return}
   var total=Math.round(sumMap(cellMap(lines))*100)/100,target,center,fy;
   if(mode==='memo'){target=plan.total;center=plan.center;fy=plan.fy}
-  else{target=Number(document.getElementById('pt').value)||0;if(mode==='new'){center=document.getElementById('pcen').value.trim();fy=document.getElementById('pfy').value.trim()||'FY26';if(!center){err.textContent='請填寫執行中心。';return}}else{center=plan.center;fy=plan.fy}}
+  else{target=Number(document.getElementById('pt').value)||0;if(mode==='new'){center=document.getElementById('pcen').value.trim();fy=document.getElementById('pfy').value.trim()||curFY();if(!center){err.textContent='請填寫執行中心。';return}}else{center=plan.center;fy=plan.fy}}
   if(target<=0){err.textContent='請填寫原始 POA 年度總額。';return}
   var xe=document.getElementById('xout'),xi=document.getElementById('xin'),xfer=null;
   if(xe||xi){var xo=Number(xe&&xe.value)||0,xn=Number(xi&&xi.value)||0;
@@ -1313,8 +1328,8 @@ async function poaSave(){
 
 
 /* ---------- CSV import ---------- */
-var IMP={"project": {"label": "方案(計畫書基本資料)", "file": "匯入範本_方案.csv", "cols": [{"h": "事工編碼", "k": "code", "t": "text", "req": 1}, {"h": "方案名稱", "k": "name", "t": "text", "req": 1}, {"h": "執行中心", "k": "center", "t": "text", "req": 1}, {"h": "年度", "k": "fy", "t": "sel", "opts": "FYS", "def": "FY26"}, {"h": "計畫月份", "k": "month", "t": "sel", "req": 1, "opts": "MONTHS"}, {"h": "依據SDGs", "k": "sdgs", "t": "sdg"}, {"h": "CWBO", "k": "cwbo", "t": "list"}, {"h": "服務策略", "k": "strategy", "t": "list"}, {"h": "需求評估", "k": "need", "t": "text"}, {"h": "執行起日", "k": "startDate", "t": "date"}, {"h": "執行迄日", "k": "endDate", "t": "date"}, {"h": "執行地點", "k": "place", "t": "text"}, {"h": "執行方式及內容", "k": "method", "t": "text"}, {"h": "POA預算(備用)", "k": "poa", "t": "num"}], "sample": [["FY26-001", "週末籃球營", "OO中心", "FY26", "11月", "SDG3、SDG4", "兒童享有健康的生活", "運動與品格教育", "社區兒童缺乏安全的運動空間", "2026-11-01", "2026-11-30", "中心活動室", "分組教學、技巧練習與分組賽", "12000"]], "tips": "多個 SDGs、CWBO、服務策略請用「、」分隔。SDGs 可寫 SDG4、4 或完整名稱。年度為 10 月至隔年 9 月(FY26 = 2026/10–2027/09)。"}, "objective": {"label": "活動目標與評估方法", "file": "匯入範本_活動目標.csv", "cols": [{"h": "序號", "k": "no", "t": "num"}, {"h": "活動目標", "k": "text", "t": "text", "req": 1}, {"h": "評估指標", "k": "indicator", "t": "text"}, {"h": "評估工具", "k": "tool", "t": "text"}, {"h": "頻率", "k": "freq", "t": "text"}], "sample": [["1", "在一個月內讓 80% 的成員學會三步上籃", "達成率 80%", "技巧檢核表", "每次活動"]], "tips": "序號留空會依順序自動編號。"}, "audience": {"label": "參與對象(預期人數)", "file": "匯入範本_參與對象.csv", "cols": [{"h": "對象", "k": "kind", "t": "sel", "req": 1, "opts": "KINDS"}, {"h": "預期人數", "k": "expPeople", "t": "num"}, {"h": "預期人次", "k": "expTimes", "t": "num"}], "sample": [["受助童", "20", "60"], ["社工員", "2", "6"]], "tips": "對象必須是:受助童、受助家長、社區童、社區居民、社工員、志工(實習生)、督導、講師。預期人次留空時以預期人數計。"}, "budget": {"label": "經費預算明細", "file": "匯入範本_預算.csv", "cols": [{"h": "經費類別", "k": "cat", "t": "text"}, {"h": "月份", "k": "month", "t": "sel", "req": 1, "opts": "MONTHS"}, {"h": "項次", "k": "no", "t": "num"}, {"h": "項目", "k": "item", "t": "text", "req": 1}, {"h": "單價", "k": "price", "t": "num", "req": 1}, {"h": "數量", "k": "qty", "t": "num", "req": 1}, {"h": "單位", "k": "unit", "t": "text"}, {"h": "說明", "k": "note", "t": "text"}], "sample": [["講座/授課鐘點費", "11月", "1", "講師費", "1000", "6", "小時", ""], ["膳食費", "11月", "2", "點心與飲水", "60", "100", "份", ""]], "tips": "總價由單價 × 數量自動計算。經費類別請與機構科目名稱一致,成果報告會依類別分組。月份可寫 11月 或 11。"}, "event": {"label": "活動場次", "file": "匯入範本_活動場次.csv", "cols": [{"h": "日期", "k": "date", "t": "date", "req": 1}, {"h": "結束日期", "k": "endDate", "t": "date"}, {"h": "開始時間", "k": "start", "t": "time"}, {"h": "結束時間", "k": "end", "t": "time"}, {"h": "活動名稱", "k": "name", "t": "text", "req": 1}, {"h": "預計人數", "k": "plannedPeople", "t": "num"}, {"h": "活動內容", "k": "content", "t": "text"}, {"h": "負責人員", "k": "owner", "t": "text"}, {"h": "地點", "k": "place", "t": "text"}, {"h": "備註", "k": "note", "t": "text"}], "sample": [["2026-11-07", "2026-11-09", "14:00", "16:00", "基礎運球與三步上籃", "20", "暖身、運球、三步上籃分組練習", "王小明", "中心活動室", ""], ["2026-11-14", "", "14:00", "16:00", "分組賽", "20", "分組對抗賽", "王小明", "中心活動室", ""]], "tips": "日期格式 2026-11-07。時間格式 14:00。「結束日期」選填,多日活動(營隊)才填。"}, "participant": {"label": "參與者名冊", "file": "匯入範本_參與者名冊.csv", "cols": [{"h": "對象", "k": "kind", "t": "sel", "req": 1, "opts": "KINDS"}, {"h": "編號", "k": "code", "t": "text", "req": 1}, {"h": "家庭代號", "k": "hh", "t": "text"}, {"h": "備註", "k": "note", "t": "text"}], "sample": [["受助童", "C10231", "F01", ""], ["受助童", "小明", "F01", "C10231 的手足"], ["社區童", "小華", "", ""]], "tips": "每一列一位參與者。「編號」:個案填個案編號;手足、社區童填去姓氏的名。「家庭代號」選填,同一家庭填相同代號可統計戶數。請勿填完整姓名。"}};
-var FYS=FYLIST;
+var IMP={"project": {"label": "方案(計畫書基本資料)", "file": "匯入範本_方案.csv", "cols": [{"h": "事工編碼", "k": "code", "t": "text", "req": 1}, {"h": "方案名稱", "k": "name", "t": "text", "req": 1}, {"h": "執行中心", "k": "center", "t": "text", "req": 1}, {"h": "年度", "k": "fy", "t": "sel", "opts": "FYS", "def": "FY27"}, {"h": "計畫月份", "k": "month", "t": "sel", "req": 1, "opts": "MONTHS"}, {"h": "依據SDGs", "k": "sdgs", "t": "sdg"}, {"h": "CWBO", "k": "cwbo", "t": "list"}, {"h": "服務策略", "k": "strategy", "t": "list"}, {"h": "需求評估", "k": "need", "t": "text"}, {"h": "執行起日", "k": "startDate", "t": "date"}, {"h": "執行迄日", "k": "endDate", "t": "date"}, {"h": "執行地點", "k": "place", "t": "text"}, {"h": "執行方式及內容", "k": "method", "t": "text"}, {"h": "POA預算(備用)", "k": "poa", "t": "num"}], "sample": [["FY27-001", "週末籃球營", "OO中心", "FY27", "11月", "SDG3、SDG4", "兒童享有健康的生活", "運動與品格教育", "社區兒童缺乏安全的運動空間", "2026-11-01", "2026-11-30", "中心活動室", "分組教學、技巧練習與分組賽", "12000"]], "tips": "多個 SDGs、CWBO、服務策略請用「、」分隔。SDGs 可寫 SDG4、4 或完整名稱。年度為 10 月至隔年 9 月(FY26 = 2025/10–2026/09;FY27 = 2026/10–2027/09)。計畫月份是方案「開始執行」的月份;有填執行起日時,以起日的月份為準,且起日必須落在該年度內。"}, "objective": {"label": "活動目標與評估方法", "file": "匯入範本_活動目標.csv", "cols": [{"h": "序號", "k": "no", "t": "num"}, {"h": "活動目標", "k": "text", "t": "text", "req": 1}, {"h": "評估指標", "k": "indicator", "t": "text"}, {"h": "評估工具", "k": "tool", "t": "text"}, {"h": "頻率", "k": "freq", "t": "text"}], "sample": [["1", "在一個月內讓 80% 的成員學會三步上籃", "達成率 80%", "技巧檢核表", "每次活動"]], "tips": "序號留空會依順序自動編號。"}, "audience": {"label": "參與對象(預期人數)", "file": "匯入範本_參與對象.csv", "cols": [{"h": "對象", "k": "kind", "t": "sel", "req": 1, "opts": "KINDS"}, {"h": "預期人數", "k": "expPeople", "t": "num"}, {"h": "預期人次", "k": "expTimes", "t": "num"}], "sample": [["受助童", "20", "60"], ["社工員", "2", "6"]], "tips": "對象必須是:受助童、受助家長、社區童、社區居民、社工員、志工(實習生)、督導、講師。預期人次留空時以預期人數計。"}, "budget": {"label": "經費預算明細", "file": "匯入範本_預算.csv", "cols": [{"h": "經費類別", "k": "cat", "t": "text"}, {"h": "月份", "k": "month", "t": "sel", "req": 1, "opts": "MONTHS"}, {"h": "項次", "k": "no", "t": "num"}, {"h": "項目", "k": "item", "t": "text", "req": 1}, {"h": "單價", "k": "price", "t": "num", "req": 1}, {"h": "數量", "k": "qty", "t": "num", "req": 1}, {"h": "單位", "k": "unit", "t": "text"}, {"h": "說明", "k": "note", "t": "text"}], "sample": [["講座/授課鐘點費", "11月", "1", "講師費", "1000", "6", "小時", ""], ["膳食費", "11月", "2", "點心與飲水", "60", "100", "份", ""]], "tips": "總價由單價 × 數量自動計算。經費類別請與機構科目名稱一致,成果報告會依類別分組。月份可寫 11月 或 11。"}, "event": {"label": "活動場次", "file": "匯入範本_活動場次.csv", "cols": [{"h": "日期", "k": "date", "t": "date", "req": 1}, {"h": "結束日期", "k": "endDate", "t": "date"}, {"h": "開始時間", "k": "start", "t": "time"}, {"h": "結束時間", "k": "end", "t": "time"}, {"h": "活動名稱", "k": "name", "t": "text", "req": 1}, {"h": "預計人數", "k": "plannedPeople", "t": "num"}, {"h": "活動內容", "k": "content", "t": "text"}, {"h": "負責人員", "k": "owner", "t": "text"}, {"h": "地點", "k": "place", "t": "text"}, {"h": "備註", "k": "note", "t": "text"}], "sample": [["2026-11-07", "2026-11-09", "14:00", "16:00", "基礎運球與三步上籃", "20", "暖身、運球、三步上籃分組練習", "王小明", "中心活動室", ""], ["2026-11-14", "", "14:00", "16:00", "分組賽", "20", "分組對抗賽", "王小明", "中心活動室", ""]], "tips": "日期格式 2026-11-07。時間格式 14:00。「結束日期」選填,多日活動(營隊)才填。"}, "participant": {"label": "參與者名冊", "file": "匯入範本_參與者名冊.csv", "cols": [{"h": "對象", "k": "kind", "t": "sel", "req": 1, "opts": "KINDS"}, {"h": "編號", "k": "code", "t": "text", "req": 1}, {"h": "家庭代號", "k": "hh", "t": "text"}, {"h": "備註", "k": "note", "t": "text"}], "sample": [["受助童", "C10231", "F01", ""], ["受助童", "小明", "F01", "C10231 的手足"], ["社區童", "小華", "", ""]], "tips": "每一列一位參與者。「編號」:個案填個案編號;手足、社區童填去姓氏的名。「家庭代號」選填,同一家庭填相同代號可統計戶數。請勿填完整姓名。"}};
+var FYS=FYLIST;IMP.project.cols.forEach(function(c){if(c.k==='fy')c['def']=curFY()});
 function optsOf(n){return n==='KINDS'?KINDS:n==='MONTHS'?MONTHS:n==='FYS'?FYS:null}
 function csvEsc(v){v=String(v==null?'':v);return/[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
 function tplText(key){var sp=IMP[key];return[sp.cols.map(function(c){return c.h})].concat(sp.sample).map(function(r){return r.map(csvEsc).join(',')}).join('\r\n')+'\r\n'}
@@ -1352,7 +1367,7 @@ function conv(col,raw){
   return{v:raw};
 }
 var IMPX={
-  project:{check:function(d,ctx){if(ctx.mode==='into'){var cp=S.projects.get(ctx.pid);if(d.code&&cp&&d.code!==cp.code)return'事工編碼「'+d.code+'」與本方案('+cp.code+')不同';return}if(Array.from(S.projects.values()).some(function(p){return p.code===d.code})||ctx.seen['c:'+d.code])return'事工編碼「'+d.code+'」已存在,請進入該方案後再匯入';ctx.seen['c:'+d.code]=1}},
+  project:{check:function(d,ctx){var pe=projDateFix(d);if(pe)return pe;if(ctx.mode==='into'){var cp=S.projects.get(ctx.pid);if(d.code&&cp&&d.code!==cp.code)return'事工編碼「'+d.code+'」與本方案('+cp.code+')不同';return}if(Array.from(S.projects.values()).some(function(p){return p.code===d.code})||ctx.seen['c:'+d.code])return'事工編碼「'+d.code+'」已存在,請進入該方案後再匯入';ctx.seen['c:'+d.code]=1}},
   audience:{check:function(d,ctx){if(kids('audiences',ctx.pid).some(function(a){return a.kind===d.kind})||ctx.seen['k:'+d.kind])return'「'+d.kind+'」已經有資料,請直接編輯';ctx.seen['k:'+d.kind]=1;if(d.expTimes==null)d.expTimes=d.expPeople||0}},
   budget:{check:function(d){d.cat=catNorm(d.cat);d.total=Math.round((d.price||0)*(d.qty||0)*100)/100},warn:function(d){return!d.cat?'未填經費類別(仍會匯入,歸入「未分類」,請事後編輯)':catOk(d.cat)?'':'經費類別「'+d.cat+'」不在公司規定的 17 項內(仍會匯入,請事後編輯改選)'}},
   event:{check:function(d,ctx){if(d.endDate&&d.endDate<d.date)return'結束日期不能早於開始日期';if(d.status!=='已辦理'&&d.status!=='取消')d.status='未辦理';if(!d.place){var p=S.projects.get(ctx.pid);d.place=(p&&p.place)||''}}},
@@ -1483,13 +1498,21 @@ function bookAnalyze(sheets,mode){
   return parts;
 }
 function bookTemplateSheets(){
-  var tips={code:'必填。例如 FY27-001',name:'必填',center:'必填。例如 OO中心',fy:'FY27 = 2027/10–2028/09',month:'必填。10月~9月',sdgs:'可寫 SDG4、4 或完整名稱,多項用「、」分隔',cwbo:'多項用「、」分隔',strategy:'多項用「、」分隔',need:'區域問題、服務現況與需求',startDate:'格式 2026-11-01',endDate:'格式 2026-11-30',place:'',method:'概述即可,逐場流程填在「活動場次」',poa:'選填。已登記「年度 POA」時以年度 POA 為準'};
+  var tips={code:'必填。例如 FY27-001',name:'必填',center:'必填。例如 OO中心',fy:'FY26 = 2025/10–2026/09;FY27 = 2026/10–2027/09(可填 FY20~FY60)',month:'必填。方案開始執行的月份,只能填:'+MONTHS.join('、')+'(有填執行起日時以起日為準)',sdgs:'可寫 SDG4、4 或完整名稱,多項用「、」分隔。完整名稱見「名稱對照」頁籤',cwbo:'依 POA 指導原則填寫,多項用「、」分隔',strategy:'依 POA 指導原則填寫,多項用「、」分隔',need:'區域問題、服務現況與需求',startDate:'格式 2026-11-01',endDate:'格式 2026-11-30',place:'',method:'概述即可,逐場流程填在「活動場次」',poa:'選填。已登記「年度 POA」時以年度 POA 為準'};
   var P=IMP.project,basic=[['項目','內容','填寫說明']];
   P.cols.forEach(function(c,i){var v=P.sample[0][i];basic.push([c.h+(c.req?'*':''),c.t==='num'&&v!==''?Number(v):v,tips[c.k]||''])});
-  var out=[{name:'說明',noHead:1,wrap:1,widths:[110],rows:[['一份檔案、多個頁籤:每個頁籤對應系統的一個區塊。匯入時,系統依「頁籤名稱」辨識,頁籤順序不拘,沒有資料的頁籤可以整個刪掉。'],['【基本資料與策略】兩欄式:左欄是項目名稱、中欄填內容。含「*」的是必填。'],['其他頁籤:第一列是表頭(請勿改名),下面每一列一筆資料。範例列請先刪除或改成你的資料。'],['日期請填 2026-11-07 或 2026/11/07;時間填 14:00;對象請填:'+KINDS.join('、')+'。'],['在方案內匯入:資料會加到目前的方案;在首頁匯入:會用「基本資料與策略」新增一個方案。'],['參與者名冊:個案填個案編號,手足、社區童填去姓氏的名。請勿填完整姓名、身分證字號或聯絡方式。']]},
+  var out=[{name:'說明',noHead:1,wrap:1,widths:[110],rows:[['一份檔案、多個頁籤:每個頁籤對應系統的一個區塊。匯入時,系統依「頁籤名稱」辨識,頁籤順序不拘,沒有資料的頁籤可以整個刪掉。'],['【基本資料與策略】兩欄式:左欄是項目名稱、中欄填內容。含「*」的是必填。'],['其他頁籤:第一列是表頭(請勿改名),下面每一列一筆資料。範例列請先刪除或改成你的資料。'],['日期請填 2026-11-07 或 2026/11/07;時間填 14:00;對象請填:'+KINDS.join('、')+'。'],['在方案內匯入:資料會加到目前的方案;在首頁匯入:會用「基本資料與策略」新增一個方案。'],['參與者名冊:個案填個案編號,手足、社區童填去姓氏的名。請勿填完整姓名、身分證字號或聯絡方式。'],['【已定義的名稱】年度、月份、參與對象、經費類別、SDGs 都必須填系統已定義的名稱,請看「名稱對照」頁籤(匯入時會自動略過該頁籤)。'],['參與對象只能是:'+KINDS.join('、')+'。月份只能是:'+MONTHS.join('、')+'。']]},
     {name:'基本資料與策略',widths:[18,46,48],rows:basic,wrap:1}];
   BOOK.slice(1).forEach(function(b){var sp=IMP[b.spec];
     out.push({name:b.label,widths:sp.cols.map(function(c){return c.t==='text'&&(c.k==='text'||c.k==='content'||c.k==='note')?34:14}),rows:[sp.cols.map(function(c){return c.h+(c.req?'*':'')})].concat(sp.sample.map(function(r){return r.map(function(v,i){return sp.cols[i].t==='num'&&v!==''?Number(v):v})}))})});
+  var ref=[['欄位 / 使用頁籤','可填的名稱','說明'],
+    ['年度(基本資料與策略)','FY20 ~ FY60','10月至隔年9月。FY26 = 2025/10–2026/09;FY27 = 2026/10–2027/09']];
+  ref.push(['計畫月份(基本資料)/月份(經費預算明細)',MONTHS.join('、'),'計畫月份 = 方案開始執行的月份;有填執行起日時以起日為準']);
+  KINDS.forEach(function(k,i){ref.push(i?['',k,'']:['對象(參與對象、參與者名冊)',k,'只能填這 '+KINDS.length+' 種;參與者名冊「編號」見說明頁'])});
+  CATS.forEach(function(c,i){ref.push([i?'':'經費類別(經費預算明細)',c,i?'':'須與公司規定的 '+CATS.length+' 項一致,成果報告依類別分組'])});
+  SDGS.forEach(function(g,i){ref.push([i?'':'依據 SDGs(基本資料與策略)',g,i?'':'可寫 SDG4、4 或完整名稱,多項用「、」分隔'])});
+  ref.push(['活動場次狀態','未辦理、已辦理、取消','範本沒有此欄,匯入後預設為「未辦理」']);
+  out.push({name:'名稱對照',widths:[34,34,52],rows:ref,wrap:1});
   return out;
 }
 function openBook(mode){
@@ -1528,7 +1551,7 @@ async function bookGo(){
   go.disabled=true;
   try{
     var bp=st.parts[0],bd=(bp&&bp.rows.length&&!bp.rows[0].err)?bp.rows[0].d:null;
-    if(mode==='new'){if(!bd)throw new Error('缺少基本資料');var d0=Object.assign({},bd);d0.owner=uid;d0.status='執行中';d0.approvals={};if(!d0.fy)d0.fy='FY26';pid=await saveDoc('projects',null,d0);done++}
+    if(mode==='new'){if(!bd)throw new Error('缺少基本資料');var d0=Object.assign({},bd);d0.owner=uid;d0.status='執行中';d0.approvals={};if(!d0.fy)d0.fy=curFY();pid=await saveDoc('projects',null,d0);done++}
     else if(bd){var u={};Object.keys(bd).forEach(function(k){var v=bd[k];if(v===''||v==null||(Array.isArray(v)&&!v.length))return;u[k]=v});if(Object.keys(u).length){await saveDoc('projects',pid,u);done++}}
     var total=0;st.parts.forEach(function(p){if(p.b.key!=='basic')total+=p.rows.filter(function(r){return!r.err}).length});
     for(var pi=1;pi<st.parts.length;pi++){
@@ -1844,7 +1867,7 @@ var A={
  sample:async function(){
    var ok=await ask('建立一個「範例方案」,內含示範資料,方便試用。之後可整個刪除。','建立範例');if(!ok)return;
    try{
-     var pid=await saveDoc('projects',null,{code:'FY26-範例',name:'(範例)週末籃球營',center:'OO中心',fy:'FY26',month:'11月',owner:uid,status:'執行中',approvals:{},sdgs:['SDG3 健康與福祉','SDG4 優質教育'],cwbo:['兒童享有健康的生活'],strategy:['運動與品格教育'],need:'(範例)社區兒童缺乏安全的運動空間與團體學習機會。',startDate:today(),endDate:today(),place:'中心活動室',method:'(範例)分組教學、技巧練習與分組賽。',poa:12000});
+     var pid=await saveDoc('projects',null,{code:curFY()+'-範例',name:'(範例)週末籃球營',center:'OO中心',fy:curFY(),month:(new Date().getMonth()+1)+'月',owner:uid,status:'執行中',approvals:{},sdgs:['SDG3 健康與福祉','SDG4 優質教育'],cwbo:['兒童享有健康的生活'],strategy:['運動與品格教育'],need:'(範例)社區兒童缺乏安全的運動空間與團體學習機會。',startDate:today(),endDate:today(),place:'中心活動室',method:'(範例)分組教學、技巧練習與分組賽。',poa:12000});
      var add=function(c,d){d.projectId=pid;return saveDoc(c,null,d)};
      await add('objectives',{no:1,text:'(範例)在一個月內讓 80% 的成員學會三步上籃',indicator:'達成率 80%',tool:'技巧檢核表',freq:'每次活動'});
      await add('audiences',{kind:'受助童',expPeople:20,expTimes:60,actPeople:null,actHouseholds:null});
