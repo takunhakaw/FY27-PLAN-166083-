@@ -1649,6 +1649,7 @@ function openPoaEditor(mode,plan){
   var title=mode==='new'?'建立年度 POA(原始版本)':mode==='edit0'?'修改目前版本(新增/調整)':'新增經費異動版本(整年度重新登記)';
   var top='';
   if(mode==='new')top='<div class="two"><div class="fld"><label for="pcen">執行中心 <i>*</i></label><input type="text" id="pcen" list="dl_pcen" value="'+esc(center)+'"><datalist id="dl_pcen">'+Object.keys(centers).map(function(c){return'<option value="'+esc(c)+'">'}).join('')+'</datalist></div><div class="fld"><label for="pfy">年度</label><input type="text" id="pfy" value="'+curFY()+'"><div class="help">10月至隔年9月</div></div></div>';
+  if(mode==='new')top+='<div class="note info">這裡建立的是<b>版本 0(原始 POA)</b>:請照<b>原始核定金額</b>登記。若這些方案已有核銷、而且原始金額低於已核銷金額,儲存時系統只會提醒、不會阻擋;儲存後再按「新增經費異動版本」建立 V1,把金額調到足以涵蓋已核銷即可。</div>';
   if(mode==='edit0'&&plan)top+='<div class="note info">直接在目前生效版本 v'+latest.ver+' 上新增方案列或調整金額,<b>不會產生新版本</b>,也不用重新登打。若這是正式的經費異動、需要留下紀錄,請改用「新增經費異動版本」。</div>';
   var showX=false;
   if(mode!=='memo')top+='<div class="fld"><label for="pt">原始 POA 年度總額(元) <i>*</i></label><input type="number" id="pt" min="0" step="any" value="'+(plan?plan.total:'')+'"><div class="help">原始核定的中心年度總額。方案費用在社工之間轉移不影響總額,只要在「登記狀況」用「交接/換人」調整承辦即可。</div></div>';
@@ -1772,7 +1773,12 @@ async function poaSave(){
   if(Math.abs(total-adj)>0.005){err.textContent='全年登記合計 $'+money(total)+' 與'+(xfer&&(xfer.out||xfer['in'])?'調整後年度基準 $'+money(adj)+'(原始 $'+money(target)+' − 轉出 $'+money(xfer.out)+' + 轉入 $'+money(xfer['in'])+')':'原始 POA $'+money(target))+' 不同(差 $'+money(Math.abs(total-adj))+'),必須相同才能儲存。';return}
   var st=poaStats(center),nm2=cellMap(lines),bad=[];
   Object.keys(st.spent).forEach(function(k){if((nm2[k]||0)<st.spent[k]-0.005){var a=k.split(SEP);bad.push(a[0]+' '+(names[a[0]]||codeName(a[0],null))+'｜'+a[1]+'(已核銷 $'+money(st.spent[k])+')')}});
-  if(bad.length){err.textContent='以下方案/月份的登記額低於已核銷金額,請調高:'+bad.slice(0,4).join('、')+(bad.length>4?' 等 '+bad.length+' 項':'');return}
+  if(bad.length){
+    var badTxt=bad.slice(0,4).join('、')+(bad.length>4?' 等 '+bad.length+' 項':'');
+    if(mode==='memo'){err.textContent='以下方案/月份的登記額低於已核銷金額,請調高:'+badTxt;return}
+    /* 建立原始版本(版0)/修改目前版本:允許登記額暫時低於已核銷(例如原版本已被刪除、核銷已發生),
+       確認後仍可儲存;之後再用「新增經費異動版本」(V1)調高到足以涵蓋已核銷金額。 */
+    if(!window.confirm('提醒:以下方案/月份的登記額低於已核銷金額:\n'+badTxt+'\n\n'+(mode==='new'?'這是在還原「原始版本」,可以先照原始 POA 金額儲存;儲存後請再按「新增經費異動版本」建立 V1,把這些月份調高到至少等於已核銷金額。':'儲存後請記得用「新增經費異動版本」調整這些月份。')+'\n\n仍要儲存嗎?'))return}
   var reason='',appr='',date=today();
   if(mode==='memo'){
     reason=document.getElementById('preason').value.trim();appr=document.getElementById('pappr').value.trim();date=document.getElementById('pdate').value||today();
